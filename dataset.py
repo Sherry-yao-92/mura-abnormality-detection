@@ -5,7 +5,7 @@ from PIL import Image
 
 DATA_ROOT = Path("data")
 
-def load_index(split, body_part=None):
+def load_img_table(split, body_part=None):
     df = pd.read_csv(DATA_ROOT / "MURA-v1.1" / f"{split}_image_paths.csv", header = None, names=["path"])
 
     df["study"] = df["path"].str.rsplit("/", n=1).str[0] + "/"
@@ -19,7 +19,7 @@ def load_index(split, body_part=None):
 
 def check_labels(split):
     truth = pd.read_csv(DATA_ROOT / "MURA-v1.1" / f"{split}_labeled_studies.csv", header = None, names=["study", "true_label"])
-    images = load_index(split)
+    images = load_img_table(split)
     merged = pd.merge(images, truth, on="study", how="left")
     assert not merged["true_label"].isna().any()
     assert (merged["label"]).equals(merged["true_label"])
@@ -43,19 +43,30 @@ class MuraDataset(Dataset):
         return img, int(row["label"]), row["study"]
 
 if __name__ == "__main__":
-    df = load_index("valid", "XR_WRIST")
-    print(df.shape)
-    print(df.head())
+
+    # Verify if label_img_table match with label_study_table
+    print("--- label check ---")
     check_labels("valid")
     check_labels("train")
 
+    # Dataset smoke test
     from torchvision import transforms
-
     tmp = transforms.Compose([transforms.Resize((224, 224)),transforms.ToTensor(),])
-    ds = MuraDataset(load_index("valid", "XR_WRIST"), transform=tmp)
+    ds = MuraDataset(load_img_table("valid", "XR_WRIST"), transform=tmp)
+    print("\n--- dataset smoke test ---")
     print(len(ds))
     img, label, study = ds[0]
     print(img.shape, img.dtype, img.min().item(), img.max().item())
     print(label, study)
 
-
+    # Wrist statistics
+    print("\n--- wrist statistics ---")
+    for split in ["train", "valid"]:
+        wrist = load_img_table(split, "XR_WRIST")
+        print(f"{split} wrist statistics:")
+        print(f"images                          : {len(wrist)}") # number of wrist images
+        print(f"studies                         : {wrist['study'].nunique()}") # number of non-repeating wrist studies
+        print(f"positive rate per image         : {wrist['label'].mean():.3f}") # positive rate per image
+        print(f"positive rate per study         : {wrist.groupby('study')['label'].first().mean():.3f}") # positive rate per study (choose the first label of each study)
+        print("distribution of images per study:") # distribution of images per study: index = #images, value = #studies
+        print(wrist["study"].value_counts().value_counts().sort_index().to_string()) 
