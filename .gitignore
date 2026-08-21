@@ -1,0 +1,11 @@
+# 資料集絕不進 repo（Stanford RUA 禁止再散布）
+data/
+
+# 訓練產生的大檔
+cache/
+checkpoints/
+*.pth
+*.pt
+
+__pycache__/
+.ipynb_checkpoints/
