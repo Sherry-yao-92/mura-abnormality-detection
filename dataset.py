@@ -15,8 +15,20 @@ def load_index(split, body_part=None):
 
     return df
 
+def check_labels(split):
+    truth = pd.read_csv(DATA_ROOT / "MURA-v1.1" / f"{split}_labeled_studies.csv", header = None, names=["study", "true_label"])
+    images = load_index(split)
+    merged = pd.merge(images, truth, on="study", how="left")
+    assert not merged["true_label"].isna().any()
+    assert (merged["label"]).equals(merged["true_label"])
+    print(f"[{split}] {len(merged)} images, {merged['study'].nunique()} studies — labels verified")
+
+
 if __name__ == "__main__":
     df = load_index("valid", "XR_WRIST")
     print(df.shape)
     print(df.head())
+    check_labels("valid")
+    check_labels("train")
+
 
