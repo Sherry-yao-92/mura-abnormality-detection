@@ -1,5 +1,7 @@
 from pathlib import Path
 import pandas as pd
+from torch.utils.data import Dataset
+from PIL import Image
 
 DATA_ROOT = Path("data")
 
@@ -23,6 +25,22 @@ def check_labels(split):
     assert (merged["label"]).equals(merged["true_label"])
     print(f"[{split}] {len(merged)} images, {merged['study'].nunique()} studies — labels verified")
 
+class MuraDataset(Dataset):
+    def __init__(self, df, transform=None):
+        self.df = df.reset_index(drop=True)
+        self.transform = transform
+
+    def __len__(self): 
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        img_path = DATA_ROOT / row["path"]
+        img = Image.open(img_path).convert("RGB")
+        if self.transform is not None:
+            img = self.transform(img)
+
+        return img, int(row["label"]), row["study"]
 
 if __name__ == "__main__":
     df = load_index("valid", "XR_WRIST")
@@ -30,5 +48,14 @@ if __name__ == "__main__":
     print(df.head())
     check_labels("valid")
     check_labels("train")
+
+    from torchvision import transforms
+
+    tmp = transforms.Compose([transforms.Resize((224, 224)),transforms.ToTensor(),])
+    ds = MuraDataset(load_index("valid", "XR_WRIST"), transform=tmp)
+    print(len(ds))
+    img, label, study = ds[0]
+    print(img.shape, img.dtype, img.min().item(), img.max().item())
+    print(label, study)
 
 
