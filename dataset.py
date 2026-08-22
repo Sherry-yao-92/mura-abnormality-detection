@@ -2,6 +2,9 @@ from pathlib import Path
 import pandas as pd
 from torch.utils.data import Dataset
 from PIL import Image
+from torchvision import transforms
+import config
+import torch
 
 DATA_ROOT = Path("data")
 
@@ -24,7 +27,6 @@ def check_labels(split):
     assert not merged["true_label"].isna().any()
     assert (merged["label"]).equals(merged["true_label"])
     print(f"[{split}] {len(merged)} images, {merged['study'].nunique()} studies — labels verified")
-
 class MuraDataset(Dataset):
     def __init__(self, df, transform=None):
         self.df = df.reset_index(drop=True)
@@ -42,6 +44,22 @@ class MuraDataset(Dataset):
 
         return img, int(row["label"]), row["study"]
 
+def get_train_transform():
+    return transforms.Compose([
+        transforms.Resize((config.IMG_SIZE, config.IMG_SIZE)),
+        transforms.RandomHorizontalFlip(config.FLIP_P),
+        transforms.RandomRotation(config.ROTATION_DEG),
+        transforms.ToTensor(),
+        transforms.Normalize(config.IMAGENET_MEAN, config.IMAGENET_STD)
+    ])
+
+def get_eval_transform():
+    return transforms.Compose([
+        transforms.Resize((config.IMG_SIZE, config.IMG_SIZE)),
+        transforms.ToTensor(),
+        transforms.Normalize(config.IMAGENET_MEAN, config.IMAGENET_STD)
+    ])
+
 if __name__ == "__main__":
 
     # Verify if label_img_table match with label_study_table
@@ -49,24 +67,30 @@ if __name__ == "__main__":
     check_labels("valid")
     check_labels("train")
 
-    # Dataset smoke test
-    from torchvision import transforms
-    tmp = transforms.Compose([transforms.Resize((224, 224)),transforms.ToTensor(),])
-    ds = MuraDataset(load_img_table("valid", "XR_WRIST"), transform=tmp)
     print("\n--- dataset smoke test ---")
-    print(len(ds))
-    img, label, study = ds[0]
+    wrist_valid = load_img_table("valid", "XR_WRIST")
+    eval_ds  = MuraDataset(wrist_valid, transform=get_eval_transform())
+    train_ds = MuraDataset(wrist_valid, transform=get_train_transform())
+    print(len(eval_ds))
+    img, label, study = eval_ds[0]
     print(img.shape, img.dtype, img.min().item(), img.max().item())
     print(label, study)
 
-    # Wrist statistics
+    print("\n--- augmentation check ---")
+    eval_1, _, _ = eval_ds[0]
+    eval_2, _, _ = eval_ds[0]
+    print("eval  identical twice :", torch.equal(eval_1, eval_2))
+    train_1, _, _ = train_ds[0]
+    train_2, _, _ = train_ds[0]
+    print("train identical twice :", torch.equal(train_1, train_2))
+    
     print("\n--- wrist statistics ---")
     for split in ["train", "valid"]:
         wrist = load_img_table(split, "XR_WRIST")
         print(f"{split} wrist statistics:")
         print(f"images                          : {len(wrist)}") # number of wrist images
         print(f"studies                         : {wrist['study'].nunique()}") # number of non-repeating wrist studies
-        print(f"positive rate per image         : {wrist['label'].mean():.3f}") # positive rate per image
-        print(f"positive rate per study         : {wrist.groupby('study')['label'].first().mean():.3f}") # positive rate per study (choose the first label of each study)
-        print("distribution of images per study:") # distribution of images per study: index = #images, value = #studies
+        print(f"positive rate per image         : {wrist['label'].mean():.3f}") 
+        print(f"positive rate per study         : {wrist.groupby('study')['label'].first().mean():.3f}") # choose the first label of each study
+        print("distribution of images per study:") # index = #images, value = #studies
         print(wrist["study"].value_counts().value_counts().sort_index().to_string()) 
