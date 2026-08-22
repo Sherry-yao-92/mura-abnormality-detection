@@ -14,5 +14,3 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 
 CLASS_WEIGHT = False # measured 38% positive at study level (balanced enough to skip)
 AMP = True # use Automatic Mixed Precision (AMP) to speed up training and reduce memory usage
-
-MODEL_NAME = "efficientnet_v2_s"   # 21M params; ~2x faster than v2_m, better matched to 9.7k images
