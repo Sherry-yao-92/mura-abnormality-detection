@@ -3,7 +3,7 @@ import torch.nn as nn
 import pandas as pd
 import numpy as np
 from torch.utils.data import DataLoader
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, confusion_matrix, cohen_kappa_score
 
 import config
 from dataset import load_img_table, MuraDataset, get_eval_transform
@@ -22,6 +22,28 @@ def to_study_level(probs, labels, studies):
 
     return study_df["prob"].values, study_df["label"].values, study_df
 
+def compute_metrics(probs, labels, threshold=0.5):
+    preds = (probs >= threshold).astype(int)
+    tn, fp, fn, tp = confusion_matrix(labels, preds).ravel()
+
+    accuracy = (tn+tp)/(tn+fp+fn+tp)
+    sensitivity = tp/(fn+tp)
+    specificity = tn/(tn+fp)
+    precision = tp/ (fp+tp)
+    f1 = 2*precision*sensitivity/(precision+sensitivity)
+
+    return{
+        "auc": roc_auc_score(labels, probs),
+        "kappa": cohen_kappa_score(labels, preds),
+        "accuracy": accuracy,
+        "sensitivity": sensitivity,
+        "specificity": specificity,
+        "precision":precision,
+        "f1":f1,
+        "tn":tn, "fp":fp, "fn":fn, "tp":tp
+    }
+
+
 def main():
     device = torch.device("cuda")
     valid_table = load_img_table("valid", body_part=config.BODY_PART)
@@ -32,14 +54,17 @@ def main():
     model.load_state_dict(torch.load("checkpoints/best_auc.pt", map_location=device))
 
     criterion = nn.CrossEntropyLoss()
-    val_loss, img_level_auc, probs, labels, studies = validate(model, valid_loader, criterion, device)
-    study_level_probs, study_level_labels, study_level_df = to_study_level(probs, labels, studies)
-    study_level_auc = roc_auc_score(study_level_labels, study_level_probs)
+    val_loss, _, probs, labels, studies = validate(model, valid_loader, criterion, device)
+    study_probs, study_labels, study_df = to_study_level(probs, labels, studies)
 
-    print(f"cases of image-level:{study_level_df['n_images'].sum()}")
-    print(f"cases of study-level:{len(study_level_df)}")
-    print(f"image-level AUC:{img_level_auc:.4f}")
-    print(f"study-level AUC:{study_level_auc:.4f}")
+    img_metrics   = compute_metrics(probs, labels)
+    study_metrics = compute_metrics(study_probs, study_labels)
+
+    comparison = pd.DataFrame({
+        "image-level": img_metrics,
+        "study-level": study_metrics,
+    })
+    print(comparison.round(4))
           
 if __name__ == "__main__":
     main()
