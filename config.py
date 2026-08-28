@@ -14,3 +14,6 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 
 CLASS_WEIGHT = False # measured 38% positive at study level (balanced enough to skip)
 AMP = True # use Automatic Mixed Precision (AMP) to speed up training and reduce memory usage
+
+MIN_DELTA = 0.005 # auc will be saved if auc > Best_auc + 0.005
+SEED = 42
